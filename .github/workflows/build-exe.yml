@@ -4,6 +4,18 @@ name: Build Windows EXE
 # 刻意不跑 go test：本次改动只涉及 web/ 下的三个前端文件，没有动 Go 代码，
 # 而原仓库的测试断言了大量英文文案，跑测试只会引入无关的噪声。
 on:
+  # 用 push 触发，而不是 workflow_dispatch：push 事件不需要 token 具备
+  # Actions 写权限，任何提交到 zh-cn 的改动都会自动编译一次。
+  push:
+    branches: ["zh-cn"]
+    paths:
+      - "web/**"
+      - "*.go"
+      - "ap/**"
+      - "go.mod"
+      - "go.sum"
+      - "versioninfo.json"
+      - ".github/workflows/build-exe.yml"
   workflow_dispatch:
     inputs:
       version:
@@ -39,9 +51,12 @@ jobs:
           CGO_ENABLED: "0"
         run: |
           set -euo pipefail
+          # push 触发时没有 inputs.version，回落到写死的默认值
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION:-1.0.11-zh}"
           mkdir -p dist
           go build -trimpath \
-            -ldflags "-s -w -X main.version=${{ github.event.inputs.version }}" \
+            -ldflags "-s -w -X main.version=${VERSION}" \
             -o dist/crossbreeder-plus-zh-windows-amd64.exe .
           ls -l dist
 
