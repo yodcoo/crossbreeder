@@ -9,7 +9,7 @@
   --ok: #3ecf8e;
   --warn: #f0b429;
   --err: #ff6b6b;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", monospace;
 }
 
 * { box-sizing: border-box; }
@@ -22,7 +22,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  font: 13px/1.45 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -184,9 +184,9 @@ tbody tr.scanning td { opacity: .38; transition: opacity .25s; }
 tbody tr td { transition: opacity .25s; }
 tbody tr.pick:hover { background: #2a3c55; }
 tbody { user-select: none; }
-td.note { color: var(--warn); white-space: normal; font-family: system-ui, sans-serif; }
+td.note { color: var(--warn); white-space: normal; font-family: system-ui, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
 td.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.err { color: var(--err); white-space: normal; font-family: system-ui, sans-serif; }
+td.err { color: var(--err); white-space: normal; font-family: system-ui, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; }
 
 .st { padding: 1px 7px; border-radius: 4px; font-size: 11px; }
 .st-done { background: #123326; color: var(--ok); }
@@ -204,7 +204,7 @@ td.err { color: var(--err); white-space: normal; font-family: system-ui, sans-se
 .tab .n { color: var(--muted); font-size: 10px; margin-left: 4px; }
 .pane { flex: 1; overflow: auto; padding: 8px 12px; font-family: var(--mono); font-size: 11.5px; white-space: pre-wrap; word-break: break-word; color: #c6d2df; }
 .pane .t { color: var(--muted); }
-.empty { color: var(--muted); font-family: system-ui, sans-serif; padding: 14px; }
+.empty { color: var(--muted); font-family: system-ui, "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif; padding: 14px; }
 
 /* ---- modal ---- */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; }
