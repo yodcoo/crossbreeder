@@ -1,0 +1,58 @@
+name: Build Windows EXE
+
+# 手动触发，只编译 Windows amd64 一个产物。
+# 刻意不跑 go test：本次改动只涉及 web/ 下的三个前端文件，没有动 Go 代码，
+# 而原仓库的测试断言了大量英文文案，跑测试只会引入无关的噪声。
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "写进 exe 版本资源的版本号"
+        required: false
+        default: "1.0.11-zh"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache: false
+
+      # 生成 Windows 版本资源（图标 + 文件属性），否则 exe 没有图标和版本号。
+      - name: Generate Windows resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.4.1
+          "$(go env GOPATH)/bin/goversioninfo" -64 -o resource_windows_amd64.syso versioninfo.json
+
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${{ github.event.inputs.version }}" \
+            -o dist/crossbreeder-plus-zh-windows-amd64.exe .
+          ls -l dist
+
+      - name: Show what was built
+        shell: bash
+        run: |
+          sha256sum dist/crossbreeder-plus-zh-windows-amd64.exe
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crossbreeder-plus-zh-windows-amd64
+          path: dist/crossbreeder-plus-zh-windows-amd64.exe
+          if-no-files-found: error
+          retention-days: 30
