@@ -3,6 +3,33 @@
 const $ = (id) => document.getElementById(id);
 const rowsEl = $('rows');
 
+/* ---------- 中文显示层 ----------
+   后端的 status / fw_status / note 保持英文原样（表格筛选、计数、CSS 类都靠它们
+   做判断），只在渲染时翻译成中文。这样中文化不需要改动任何 Go 代码。 */
+const ZH = {
+  'Queued': '排队中',
+  'Running': '进行中',
+  'Done': '完成',
+  'Skipped': '已跳过',
+  'Cancelled': '已取消',
+  'No reply': '无响应',
+  'No ping reply': 'Ping 无响应',
+  'In progress': '进行中',
+  'Rebooting': '重启中',
+  'Back online': '已恢复在线',
+  'password changed': '密码已修改',
+};
+
+// 未知英文原样返回，避免后端将来新增状态时变成空白。
+const zh = (s) => (s && ZH[s]) || s || '';
+
+// note 里只有 "Upgraded from X" 是动态拼接的，单独处理。
+const zhNote = (s) => {
+  if (!s) return '';
+  const m = /^Upgraded from (.+)$/.exec(s);
+  return m ? `已从 ${m[1]} 升级` : zh(s);
+};
+
 // One row per address, keyed by IP, so live updates land in place.
 const rows = new Map();
 let order = [];
@@ -38,9 +65,9 @@ async function checkForUpdate() {
     const u = await (await fetch('/api/update')).json();
     if (!u || !u.available) return;
     const el = $('update');
-    el.textContent = `v${u.latest} available`;
+    el.textContent = `新版本 v${u.latest}`;
     el.href = u.url || 'https://github.com/andreacoppini/crossbreeder/releases/latest';
-    el.title = `You are running ${u.current}. Click to open the release page.`;
+    el.title = `当前版本 ${u.current}。点击打开下载页。`;
     el.hidden = false;
   } catch (e) { /* offline, blocked, or GitHub is having a day — say nothing */ }
 }
@@ -105,9 +132,9 @@ function hostsChanged() {
   const n = hostList().length;
   const lines = $('hosts').value.split('\n').filter((l) => l.trim()).length;
   $('nHosts').textContent = n ? `(${n})` : '';
-  $('hostHint').textContent = !lines ? 'No addresses yet.'
-    : n === lines ? `${n} address${n === 1 ? '' : 'es'}.`
-    : `${n} of ${lines} lines are addresses; the rest are ignored.`;
+  $('hostHint').textContent = !lines ? '还没有地址。'
+    : n === lines ? `共 ${n} 个地址。`
+    : `${lines} 行中有 ${n} 个是地址，其余已忽略。`;
   persist();
 }
 
@@ -136,12 +163,12 @@ function commandLines() {
 
 function destructiveList() {
   const out = [];
-  if (acting('firmware')) out.push('push new firmware');
-  if (acting('factory')) out.push('factory reset (which forces a reboot)');
-  if (acting('reboot') && !acting('factory')) out.push('reboot');
+  if (acting('firmware')) out.push('推送新固件');
+  if (acting('factory')) out.push('恢复出厂设置（会强制重启）');
+  if (acting('reboot') && !acting('factory')) out.push('重启');
   const cmds = commandLines();
-  if (cmds.length === 1) out.push(`run: ${cmds[0]}`);
-  else if (cmds.length > 1) out.push(`run ${cmds.length} commands, starting with: ${cmds[0]}`);
+  if (cmds.length === 1) out.push(`执行命令：${cmds[0]}`);
+  else if (cmds.length > 1) out.push(`依次执行 ${cmds.length} 条命令，第一条：${cmds[0]}`);
   return out;
 }
 
@@ -163,7 +190,7 @@ function firmwareInterlock() {
   const note = $('fwInterlock');
   note.hidden = !on;
   note.textContent = on
-    ? 'Factory reset and reboot are unavailable during a firmware change: the AP downloads the image after this run, and restarting it would discard the download.'
+    ? '固件升级期间无法使用「恢复出厂设置」和「重启」：AP 会在本次任务结束后才下载镜像，重启会丢弃已下载的内容。'
     : '';
 }
 
@@ -172,13 +199,13 @@ function actionsChanged() {
   const d = destructiveList();
   const el = $('destructive');
   el.hidden = d.length === 0;
-  el.textContent = d.length ? 'This run changes the APs. You will be asked to confirm.' : '';
+  el.textContent = d.length ? '本次任务会修改 AP 配置，执行前会请你确认。' : '';
   $('watchOpts').hidden = !$('watch').checked;
   const wh = $('watchHint');
   wh.className = 'hint';
   wh.textContent = $('watch').checked
-    ? 'The first pass does the above; after that it keeps pinging and re-reading the version until you press Stop.'
-    : 'The run finishes after one pass.';
+    ? '第一轮执行上述操作；之后会持续 ping 并重读版本号，直到你按「停止」。'
+    : '任务执行一轮后即结束。';
   $('fwSection').classList.toggle('collapsed', !$('firmware').checked);
   if ($('firmware').checked && internalMode()) { refreshFirmware(); refreshIPs(); }
   persist();
@@ -210,20 +237,20 @@ function credsChanged() {
   const el = $('credHint');
   if (!u && !p) {
     el.className = 'hint';
-    el.textContent = 'No username: the factory default super / sp-admin will be tried.';
+    el.textContent = '未填用户名：将尝试出厂默认账号 super / sp-admin。';
   } else if (u && !p) {
     el.className = 'hint warn';
-    el.textContent = `No password for "${u}". Passwords are not kept after the browser closes — re-enter it.`;
+    el.textContent = `"${u}" 没有填密码。浏览器关闭后密码不会保留 —— 请重新输入。`;
   } else if (!u && p) {
     el.className = 'hint warn';
-    el.textContent = 'A password with no username cannot be used. Enter the username.';
+    el.textContent = '只填密码不填用户名无法使用，请填写用户名。';
   } else {
     el.className = 'hint';
-    el.textContent = `Will try "${u}" (${p.length}-character password)` +
-      ($('alsoDefault').checked ? ', then super / sp-admin.' : '.') +
+    el.textContent = `将尝试 "${u}"（密码 ${p.length} 位）` +
+      ($('alsoDefault').checked ? '，然后试 super / sp-admin。' : '。') +
       ($('changePass').checked && $('newPass').value
-        ? ' An AP forcing a password change will be set to the new password.'
-        : ' An AP forcing a password change will be reported and skipped.');
+        ? ' AP 强制要求改密时，会被设置成新密码。'
+        : ' 要求改密的 AP 会被标记并跳过。');
   }
 }
 
@@ -236,6 +263,10 @@ document.querySelectorAll('section > h2').forEach((h) => {
 
 // The secret is never persisted — same rule as the AP password — so it is not
 // in SAVE and lives only in this field for the session.
+// 内部仍用英文键做判断（下面的 focus 逻辑依赖它），只在显示时翻译。
+const R1_FIELD_ZH = { 'tenant ID': '租户 ID', 'client ID': '客户端 ID', 'shared secret': '共享密钥' };
+const zhFields = (list) => list.map((m) => R1_FIELD_ZH[m] || m).join('、');
+
 function r1Missing() {
   const m = [];
   if (!$('r1Tenant').value.trim()) m.push('tenant ID');
@@ -252,7 +283,7 @@ function r1Changed() {
   if (!$('r1').checked) { hint.hidden = true; hint.textContent = ''; return; }
   const missing = r1Missing();
   hint.hidden = missing.length === 0;
-  hint.textContent = missing.length ? 'Still needs: ' + missing.join(', ') + '.' : '';
+  hint.textContent = missing.length ? '还需要填写：' + zhFields(missing) + '。' : '';
 }
 for (const id of ['r1', 'r1Tenant', 'r1ClientId', 'r1Secret', 'r1Region', 'r1User']) {
   $(id).addEventListener('input', r1Changed);
@@ -268,12 +299,12 @@ async function pullFromR1() {
   if (miss.length) {
     $('r1Section').classList.remove('collapsed');
     (miss[0] === 'tenant ID' ? $('r1Tenant') : miss[0] === 'client ID' ? $('r1ClientId') : $('r1Secret')).focus();
-    return toast('Enter your RUCKUS One details first: ' + miss.join(', ') + '.');
+    return toast('请先填写 RUCKUS One 信息：' + zhFields(miss) + '。');
   }
   const btn = $('r1Pull');
   const label = btn.textContent;
   btn.disabled = true;
-  btn.textContent = 'Querying…';
+  btn.textContent = '查询中…';
   try {
     const res = await fetch('/api/r1/inventory', {
       method: 'POST',
@@ -284,14 +315,14 @@ async function pullFromR1() {
       }),
     });
     const data = await res.json();
-    if (!res.ok) return toast('RUCKUS One: ' + (data.error || ('HTTP ' + res.status)));
+    if (!res.ok) return toast('RUCKUS One 返回错误：' + (data.error || ('HTTP ' + res.status)));
     const all = data.venues || [];
     r1Venues = all.filter((v) => v.aps && v.aps.length);
-    if (!r1Venues.length) return toast('No APs with an address found in RUCKUS One.');
+    if (!r1Venues.length) return toast('RUCKUS One 中没有找到带地址的 AP。');
     if (r1Venues.length === 1) { fillTargetsFromVenues(r1Venues); return; }
     openR1Picker();
   } catch (e) {
-    toast('Could not reach RUCKUS One.');
+    toast('无法连接 RUCKUS One。');
   } finally {
     btn.disabled = false;
     btn.textContent = label;
@@ -320,9 +351,9 @@ function fillTargetsFromVenues(venues) {
   const { lines, dup } = apsToLines(venues);
   $('hosts').value = lines.length ? lines.join('\n') + '\n' : '';
   hostsChanged();
-  const from = venues.length === 1 ? venues[0].name : `${venues.length} venues`;
-  toast(`Loaded ${lines.length} address${lines.length === 1 ? '' : 'es'} from ${from}` +
-    (dup ? `; ${dup} duplicate${dup === 1 ? '' : 's'} merged` : '') + '.');
+  const from = venues.length === 1 ? venues[0].name : `${venues.length} 个场所`;
+  toast(`已从 ${from} 载入 ${lines.length} 个地址` +
+    (dup ? `，合并了 ${dup} 个重复地址` : '') + '。');
 }
 
 // ---- the venue picker ----
@@ -338,13 +369,13 @@ function openR1Picker() {
     cb.dataset.i = String(i);
     cb.addEventListener('change', r1PickChanged);
     const span = document.createElement('span');
-    const extra = v.noIp ? ` (+${v.noIp} without an address)` : '';
-    span.textContent = ` ${v.name} — ${v.aps.length} AP${v.aps.length === 1 ? '' : 's'}${extra}`;
+    const extra = v.noIp ? `（另有 ${v.noIp} 台无地址）` : '';
+    span.textContent = ` ${v.name} —— ${v.aps.length} 台 AP${extra}`;
     row.append(cb, span);
     return row;
   }));
   $('r1All').checked = false;
-  $('r1PickHint').textContent = `${r1Venues.length} venues. Choose one, several, or all.`;
+  $('r1PickHint').textContent = `共 ${r1Venues.length} 个场所。可单选、多选或全选。`;
   $('r1Conflict').hidden = true;
   r1PickChanged();
   $('r1Picker').hidden = false;
@@ -373,7 +404,7 @@ function r1PickChanged() {
   if (!clashes.length) { el.hidden = true; el.textContent = ''; return; }
   const shown = clashes.slice(0, 5).map(([ip, s]) => `${ip} (${[...s].join(', ')})`).join('; ');
   el.hidden = false;
-  el.textContent = `⚠ ${clashes.length} address${clashes.length === 1 ? '' : 'es'} in more than one selected venue: ${shown}${clashes.length > 5 ? '…' : ''}. Each is added once; a run tries every matching venue's password.`;
+  el.textContent = `⚠ 有 ${clashes.length} 个地址同时出现在多个所选场所中：${shown}${clashes.length > 5 ? '…' : ''}。每个地址只会添加一次；执行时仍会尝试所有匹配场所的密码。`;
 }
 
 $('r1All').addEventListener('change', () => {
@@ -436,7 +467,7 @@ async function refreshFirmware() {
     lastFirmware = null;
     const hint = $('fwFileHint');
     hint.className = 'hint warn';
-    hint.textContent = 'Could not read that folder.';
+    hint.textContent = '无法读取该目录。';
     return;
   }
   const list = $('fwFileList');
@@ -465,24 +496,24 @@ function renderFirmwareHint() {
   // empty. Reporting it over a valid entry was the first version of this.
   if (!val) {
     hint.className = 'hint warn';
-    hint.textContent = r.error || 'Nothing to push: name a file, or one containing %M.';
+    hint.textContent = r.error || '没有可推送的文件：请填写文件名，或使用包含 %M 的模板。';
     return;
   }
   if (val.includes('%M')) {
     const hits = candidates.filter((c) => templateToRe(val).test(c));
     hint.className = hits.length ? 'hint' : 'hint warn';
     hint.textContent = hits.length
-      ? `${hits.length} file${hits.length > 1 ? 's' : ''} here match: ${hits.slice(0, 4).join(', ')}${hits.length > 4 ? '…' : ''}. ` + bareImage
-      : 'No file in this folder matches that pattern — check the spelling before running.';
+      ? `该目录有 ${hits.length} 个文件匹配：${hits.slice(0, 4).join(', ')}${hits.length > 4 ? '…' : ''}。 ` + bareImage
+      : '该目录没有文件匹配这个规则 —— 执行前请检查拼写。';
     return;
   }
   if (!candidates.includes(val)) {
     hint.className = 'hint warn';
-    hint.textContent = `There is no "${val}" in this folder.`;
+    hint.textContent = `该目录下没有 "${val}"。`;
     return;
   }
   hint.className = bareImage ? 'hint warn' : 'hint';
-  hint.textContent = (val === r.picked ? `Picked automatically: ${r.reason}. ` : 'Chosen manually. ') + bareImage;
+  hint.textContent = (val === r.picked ? `自动选中：${r.reason}。 ` : '手动指定。 ') + bareImage;
 }
 
 async function refreshIPs() {
@@ -490,7 +521,7 @@ async function refreshIPs() {
   const keep = sel.value;
   try {
     const r = await (await fetch('/api/ips?hosts=' + encodeURIComponent($('hosts').value))).json();
-    sel.replaceChildren(new Option('Automatic', ''));
+    sel.replaceChildren(new Option('自动', ''));
     for (const ip of r.ips || []) sel.appendChild(new Option(ip.label, ip.ip));
     sel.value = keep;
   } catch (e) { /* leave the automatic option alone */ }
@@ -528,15 +559,15 @@ async function openPicker(path) {
   if (!r.dirs?.length) {
     const el = document.createElement('div');
     el.className = 'empty';
-    el.textContent = 'No sub-folders here.';
+    el.textContent = '没有子目录。';
     $('pkList').replaceChildren(el);
   }
 
   const n = (r.firmware || []).length;
   $('pkFound').className = n ? 'hint' : 'hint warn';
   $('pkFound').textContent = n
-    ? `${n} firmware file${n === 1 ? '' : 's'} here: ${r.firmware.slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`
-    : 'No .rcks or .bl7 files in this folder.';
+    ? `该目录有 ${n} 个固件文件：${r.firmware.slice(0, 3).join(', ')}${n > 3 ? '…' : ''}`
+    : '该目录下没有 .rcks 或 .bl7 文件。';
   $('picker').hidden = false;
 }
 
@@ -558,8 +589,8 @@ async function pollServer() {
     const s = await (await fetch('/api/server')).json();
     const up = !!s.addr && s.running;
     $('srvDot').className = 'dot' + (up ? ' on' : '');
-    $('srvState').textContent = !s.addr ? 'Stopped' : (s.running ? 'Started' : 'Stopped');
-    $('srvAddr').textContent = s.addr ? `http://${s.addr}${s.file ? '  ·  ' + s.file : ''}` : 'not started yet';
+    $('srvState').textContent = !s.addr ? '未启动' : (s.running ? '运行中' : '未启动');
+    $('srvAddr').textContent = s.addr ? `http://${s.addr}${s.file ? '  ·  ' + s.file : ''}` : '尚未启动';
 
     $('srvActive').replaceChildren(...(s.active || []).map((a) => {
       const d = document.createElement('div');
@@ -572,8 +603,8 @@ async function pollServer() {
 
     const r = s.recent || [];
     $('srvRecent').textContent = r.length
-      ? `${r.length} completed — last: ${r[0].client} ${r[0].path} ${r[0].human}`
-      : (s.addr ? 'No downloads yet.' : '');
+      ? `${r.length} 次已完成 —— 最近：${r[0].client} ${r[0].path} ${r[0].human}`
+      : (s.addr ? '还没有下载。' : '');
   } catch (e) { /* the console outlives individual runs */ }
 }
 setInterval(pollServer, 1000);
@@ -596,7 +627,7 @@ function statusClass(s) {
 function countryCell(r) {
   if (!r.country) return '';
   if (r.countryFixed === true) {
-    return `${esc(r.country)} <span class="lock" title="country code locked by the board">locked</span>`;
+    return `${esc(r.country)} <span class="lock" title="国家码已被主板锁定">已锁定</span>`;
   }
   return esc(r.country);
 }
@@ -628,7 +659,7 @@ function paintTranscript(ip) {
   const t = transcripts.get(ip);
   const pane = $('pTx');
   const atBottom = pane.scrollHeight - pane.scrollTop - pane.clientHeight < 60;
-  pane.textContent = t || 'No session recorded for this address yet.';
+  pane.textContent = t || '该地址还没有会话记录。';
   $('txWho').textContent = `(${ip})`;
   if (atBottom) pane.scrollTop = pane.scrollHeight;
 }
@@ -694,7 +725,7 @@ function rowClick(ev, ip, listNow) {
 }
 
 function removeSelected() {
-  if (running) return toast('Stop the run before changing the list.');
+  if (running) return toast('请先停止任务，再修改列表。');
   if (!picked.size) return;
   for (const ip of picked) {
     removed.add(ip);
@@ -746,7 +777,7 @@ function render() {
   const list = visible();
   $('tableEmpty').hidden = list.length > 0;
   $('shown').textContent = list.length === order.length
-    ? `${order.length} rows` : `${list.length} of ${order.length} rows`;
+    ? `${order.length} 行` : `${list.length} / ${order.length} 行`;
 
   const ips = list.map((r) => r.ip);
   const frag = document.createDocumentFragment();
@@ -759,14 +790,14 @@ function render() {
       `<td>${esc(r.ip)}</td><td>${esc(r.mac)}</td><td>${esc(r.model)}</td><td>${esc(r.firmware)}</td>` +
       `<td>${countryCell(r)}</td>` +
       `<td class="num">${r.reachable ? esc(r.ping) : '—'}</td>` +
-      `<td><span class="st ${statusClass(r.status)}">${esc(r.status)}</span></td>` +
-      `<td>${esc(r.fw)}</td><td class="${r.error ? 'err' : 'note'}">${esc(r.error || r.note)}</td>`;
+      `<td><span class="st ${statusClass(r.status)}">${esc(zh(r.status))}</span></td>` +
+      `<td>${esc(zh(r.fw))}</td><td class="${r.error ? 'err' : 'note'}">${esc(r.error || zhNote(r.note))}</td>`;
     frag.appendChild(tr);
   }
   rowsEl.replaceChildren(frag);
-  $('selInfo').textContent = picked.size ? `${picked.size} selected` : '';
+  $('selInfo').textContent = picked.size ? `已选 ${picked.size} 台` : '';
   $('removeSel').disabled = running || picked.size === 0;
-  $('removeSel').textContent = picked.size ? `Remove ${picked.size}` : 'Remove';
+  $('removeSel').textContent = picked.size ? `移除 ${picked.size}` : '移除';
   updateChips();
 }
 
@@ -792,7 +823,7 @@ function updateChips() {
   for (const [status, n] of [...counts].sort((a, b) => b[1] - a[1])) {
     const c = document.createElement('div');
     c.className = 'chip' + (statusFilter === status ? ' on' : '');
-    c.textContent = `${status} ${n}`;
+    c.textContent = `${zh(status)} ${n}`;
     c.onclick = () => { statusFilter = statusFilter === status ? null : status; render(); };
     el.appendChild(c);
   }
@@ -811,7 +842,7 @@ document.querySelectorAll('.tab').forEach((t) => {
 $('grow').onclick = () => {
   const d = $('drawer');
   d.classList.toggle('big');
-  $('grow').textContent = d.classList.contains('big') ? 'Shrink' : 'Expand';
+  $('grow').textContent = d.classList.contains('big') ? '收起' : '展开';
 };
 
 function logLine(pane, text) {
@@ -858,20 +889,20 @@ function request() {
 
 $('run').onclick = () => {
   const hosts = hostList();
-  if (!hosts.length) return toast('No addresses to work on.');
+  if (!hosts.length) return toast('没有可处理的地址。');
   const u = $('user').value.trim(), pw = $('pass').value;
   if (u && !pw) {
     $('pass').focus();
-    return toast(`No password for "${u}" — it is not kept after the browser closes.`);
+    return toast(`"${u}" 没有填密码 —— 浏览器关闭后密码不会保留，请重新输入。`);
   }
   if (!u && pw) {
     $('user').focus();
-    return toast('A password with no username cannot be used.');
+    return toast('只填密码不填用户名无法使用。');
   }
   if ($('r1').checked) {
-    if (!$('r1Tenant').value.trim()) { $('r1Tenant').focus(); return toast('RUCKUS One needs a tenant ID.'); }
-    if (!$('r1ClientId').value.trim()) { $('r1ClientId').focus(); return toast('RUCKUS One needs a client ID.'); }
-    if (!$('r1Secret').value) { $('r1Secret').focus(); return toast('RUCKUS One needs the shared secret — it is not kept after the browser closes.'); }
+    if (!$('r1Tenant').value.trim()) { $('r1Tenant').focus(); return toast('RUCKUS One 需要租户 ID。'); }
+    if (!$('r1ClientId').value.trim()) { $('r1ClientId').focus(); return toast('RUCKUS One 需要客户端 ID。'); }
+    if (!$('r1Secret').value) { $('r1Secret').focus(); return toast('RUCKUS One 需要共享密钥 —— 浏览器关闭后不会保留。'); }
   }
   const d = destructiveList();
   if (!d.length) return start();
@@ -894,7 +925,7 @@ async function start() {
       status: 'Queued', fw: '', error: '', transcript: '' });
   }
   for (const p of ['pLog', 'pSweep', 'pXfer']) $(p).replaceChildren();
-  $('pTx').textContent = 'Select an AP to see its sessions.';
+  $('pTx').textContent = '选中一台 AP 查看会话记录。';
   $('nDead').textContent = ''; $('nXfer').textContent = '';
   nXfer = 0;
   setCount('cTotal', hostList().length); setCount('cAlive', 0);
@@ -906,7 +937,7 @@ async function start() {
     body: JSON.stringify(request()),
   });
   if (!res.ok) {
-    const e = await res.json().catch(() => ({ error: 'could not start' }));
+    const e = await res.json().catch(() => ({ error: '无法启动任务' }));
     return toast(e.error);
   }
   setRunning(true);
@@ -1039,8 +1070,8 @@ src.onmessage = (m) => {
 
     case 'error':
       toast(e.message);
-      logLine('pLog', `ERROR: ${e.message}`);
-      $('phase').textContent = 'failed';
+      logLine('pLog', `错误：${e.message}`);
+      $('phase').textContent = '失败';
       setRunning(false);
       break;
   }
