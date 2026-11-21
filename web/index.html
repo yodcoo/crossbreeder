@@ -32,7 +32,27 @@
   <section>
     <h2>目标设备 <span id="nHosts"></span></h2>
     <div class="body">
-      <textarea id="hosts" placeholder="粘贴 IP 地址，或直接粘贴整个 CSV —— 每行只取第一列。&#10;&#10;192.168.77.115&#10;172.20.44.10"></textarea>
+      <textarea id="hosts" placeholder="粘贴 IP 地址，或直接粘贴整个 CSV —— 每行只取第一列。&#10;&#10;192.168.77.115&#10;172.20.44.10">192.168.55.10
+192.168.55.11
+192.168.55.12
+192.168.55.13
+192.168.55.14
+192.168.55.15
+192.168.55.16
+192.168.55.17
+192.168.55.18
+192.168.55.19
+192.168.55.20
+192.168.55.21
+192.168.55.22
+192.168.55.23
+192.168.55.24
+192.168.55.25
+192.168.55.26
+192.168.55.27
+192.168.55.28
+192.168.55.29
+192.168.55.30</textarea>
       <div class="targetBtns">
         <button id="pick">载入文件…</button>
         <button id="r1Pull">从 RUCKUS One 拉取</button>
@@ -50,7 +70,7 @@
       <label><span>AP 密码</span><input type="password" id="pass" autocomplete="off"></label>
       <label class="check"><input type="checkbox" id="alsoDefault" checked> 同时尝试出厂默认账号（super / sp-admin）</label>
       <label class="check"><input type="checkbox" id="changePass" checked> AP 强制要求改密时自动修改</label>
-      <label><span>新密码</span><input type="password" id="newPass" value="Crossbreeder" autocomplete="off"></label>
+      <label><span>新密码</span><input type="password" id="newPass" value="admin123" autocomplete="off"></label>
       <div class="hint">与原版 Crossbreeder 一致：首次登录时被 AP 要求改密的设备会被设置成这个密码。长度必须 8 位以上，否则 AP 会拒绝。取消勾选后，这类 AP 会被标记并跳过。</div>
       <div class="hint" id="credHint"></div>
     </div>
@@ -83,11 +103,16 @@
   <section>
     <h2>操作</h2>
     <div class="body">
-      <label class="check"><input type="checkbox" id="firmware"> 升级固件</label>
+      <label class="check"><input type="checkbox" id="firmware" checked> 升级固件</label>
       <label class="check" id="factoryRow"><input type="checkbox" id="factory"> 恢复出厂设置</label>
       <label class="check" id="rebootRow"><input type="checkbox" id="reboot"> 重启</label>
       <div class="hint" id="fwInterlock" hidden></div>
-      <label><span>执行 CLI 命令</span><textarea id="command" rows="3" spellcheck="false" placeholder="set scg ip 10.0.0.5&#10;每行一条命令"></textarea></label>
+      <label><span>执行 CLI 命令</span><textarea id="command" rows="8" spellcheck="false" placeholder="set scg ip 10.0.0.5&#10;每行一条命令">set ssid wlan0 Wireless1
+set state wlan0 up
+set ssid wlan8 Wireless9
+set state wlan8 up
+set cwmode wifi1 4
+set channel wifi1 36</textarea></label>
       <div class="hint">每行一条，在同一次会话中按顺序执行，每条都会等提示符返回 —— 解锁国家码这类连续命令就是靠这个机制。</div>
       <div class="hint">什么都不勾选时，只做信息采集。</div>
       <div class="hint warn" id="destructive" hidden></div>
@@ -99,14 +124,14 @@
     <div class="body">
 
       <div class="seg" id="srvMode">
-        <label class="check"><input type="radio" name="srvmode" value="internal" id="modeInternal" checked>
+        <label class="check"><input type="radio" name="srvmode" value="internal" id="modeInternal">
           <span><b>内置</b> —— 由本机直接提供镜像下载</span></label>
-        <label class="check"><input type="radio" name="srvmode" value="external" id="modeExternal">
+        <label class="check"><input type="radio" name="srvmode" value="external" id="modeExternal" checked>
           <span><b>外部</b> —— AP 从你已有的服务器取文件</span></label>
       </div>
 
       <!-- internal -->
-      <div id="internalOpts">
+      <div id="internalOpts" hidden>
         <label><span>共享目录</span>
           <div class="row">
             <input type="text" id="serveDir" spellcheck="false">
@@ -140,20 +165,22 @@
       </div>
 
       <!-- external -->
-      <div id="externalOpts" hidden>
+      <div id="externalOpts">
         <div class="row">
           <label><span>协议</span>
-            <select id="fwProto"><option>http</option><option>tftp</option><option>ftp</option><option>https</option></select>
+            <select id="fwProto"><option selected>tftp</option><option>http</option><option>ftp</option><option>https</option></select>
           </label>
-          <label><span>端口</span><input type="text" id="fwPort"></label>
+          <label><span>端口</span><input type="text" id="fwPort" value="69"></label>
         </div>
-        <label><span>主机</span><input type="text" id="fwHost" spellcheck="false"></label>
+        <label><span>主机</span><input type="text" id="fwHost" value="192.168.55.2" spellcheck="false"></label>
         <label><span>镜像 / 控制文件</span><input type="text" id="fwFile" spellcheck="false" placeholder="例如 118.2.0.0.875.rcks"></label>
         <div class="row">
           <label><span>服务器用户名</span><input type="text" id="fwUser" autocomplete="off" spellcheck="false"></label>
           <label><span>服务器密码</span><input type="password" id="fwPass" autocomplete="off"></label>
         </div>
+        <label><span>每台间隔（秒）</span><input type="number" id="fwStagger" min="0" value="20"></label>
         <div class="hint">TFTP 或开放的 HTTP 服务器可以留空用户名和密码。文件名中的 <b>%M</b> 会替换成每台 AP 的型号。</div>
+        <div class="hint">「每台间隔」只在外部服务器时生效：保证任意两台 AP 的开始时间至少相差这么多秒，避免小型 TFTP 服务被同时涌来的十几个请求压垮（它的设置可能会因此错乱）。<b>内置服务器不需要间隔，切到内置时这一项自动忽略。</b></div>
       </div>
 
     </div>
@@ -220,6 +247,7 @@
         <th data-k="ping">延迟</th>
         <th data-k="status">结果</th>
         <th data-k="fw">固件推送</th>
+        <th>镜像下载</th>
         <th data-k="error">详情</th>
       </tr></thead>
       <tbody id="rows"></tbody>

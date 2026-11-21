@@ -42,7 +42,7 @@ let running = false;
 // The form is seeded from the flags the process was started with, so the
 // console and the command line agree on what "default" means.
 const FIELDS = ['user', 'concurrency', 'probe', 'pingTimeoutMs', 'pingRetries', 'pingConcurrency',
-  'sshPort', 'timeoutS', 'legacy', 'fwProto', 'fwPort', 'servePort', 'serveWaitS', 'serveDir',
+  'sshPort', 'timeoutS', 'legacy', 'fwProto', 'fwPort', 'fwHost', 'fwStagger', 'servePort', 'serveWaitS', 'serveDir',
   'watchIntervalS'];
 
 async function loadDefaults() {
@@ -77,13 +77,20 @@ const SAVE = [...FIELDS, 'alsoDefault', 'changePass', 'firmware', 'factory', 're
   'srvMode', 'serveIp', 'fwFile', 'fwFileSel', 'fwHost', 'fwUser', 'hosts', 'watch',
   'r1', 'r1Region', 'r1Tenant', 'r1ClientId', 'r1User'];
 
+// The key carries a version: the defaults baked into this build (prefilled
+// addresses, commands and the external server) only show up on a console with
+// nothing stored under it, and a migration would have to guess which of the
+// saved values the operator still means.
+const STORE_KEY = 'crossbreeder-v2';
+const MODE_KEY = 'cb-mode-v2';
+
 function persist() {
   const s = {};
   for (const k of SAVE) {
     const el = $(k);
     if (el) s[k] = el.type === 'checkbox' ? el.checked : el.value;
   }
-  try { localStorage.setItem('crossbreeder', JSON.stringify(s)); } catch (e) { /* private mode */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(s)); } catch (e) { /* private mode */ }
   // The password is deliberately not in SAVE: it must not survive on disk. It
   // is held for this browser session only, so a reload mid-job does not empty
   // the field without the operator noticing.
@@ -95,7 +102,7 @@ function persist() {
 
 function restore() {
   let s;
-  try { s = JSON.parse(localStorage.getItem('crossbreeder') || '{}'); } catch (e) { return; }
+  try { s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}'); } catch (e) { return; }
   for (const [k, v] of Object.entries(s)) {
     const el = $(k);
     if (!el) continue;
@@ -434,12 +441,14 @@ $('modeInternal').onchange = srvModeChanged;
 $('modeExternal').onchange = srvModeChanged;
 
 function persistMode() {
-  try { localStorage.setItem('cb-mode', internalMode() ? 'internal' : 'external'); } catch (e) { /* ignore */ }
+  try { localStorage.setItem(MODE_KEY, internalMode() ? 'internal' : 'external'); } catch (e) { /* ignore */ }
 }
 
 function restoreMode() {
-  let m = 'internal';
-  try { m = localStorage.getItem('cb-mode') || 'internal'; } catch (e) { /* ignore */ }
+  // External is the default here: the images live on the operator's own TFTP
+  // daemon, and that choice should survive a restart once it has been made.
+  let m = 'external';
+  try { m = localStorage.getItem(MODE_KEY) || 'external'; } catch (e) { /* ignore */ }
   $(m === 'external' ? 'modeExternal' : 'modeInternal').checked = true;
   srvModeChanged();
 }
@@ -584,6 +593,32 @@ $('pkPath').addEventListener('keydown', (e) => { if (e.key === 'Enter') openPick
 
 /* ---- live server status ---- */
 
+// Per-address download state, as reported by the built-in image server. Under
+// an external daemon this stays empty: that server keeps its own books and
+// cannot be asked, so the column honestly shows nothing rather than guessing.
+let srvDone = new Map();   // address -> bytes of a complete image
+let srvActive = new Map(); // address -> the request currently in flight
+
+function dlText(ip) {
+  if (srvDone.has(ip)) return `已完成 ${humanBytes(srvDone.get(ip))} ✓`;
+  const a = srvActive.get(ip);
+  if (a) {
+    const total = a.total ? ` / ${humanBytes(a.total)} (${Math.round(a.percent || 0)}%)` : '';
+    return `下载中 ${humanBytes(a.bytes)}${total}`;
+  }
+  return '—';
+}
+
+// Redrawn in place every second rather than through render(): a full redraw
+// would fight with the operator scrolling and selecting rows.
+function paintDownloads() {
+  for (const td of document.querySelectorAll('td[data-dl]')) {
+    const ip = td.dataset.dl;
+    td.textContent = dlText(ip);
+    td.classList.toggle('dl-ok', srvDone.has(ip));
+  }
+}
+
 async function pollServer() {
   try {
     const s = await (await fetch('/api/server')).json();
@@ -605,12 +640,18 @@ async function pollServer() {
     $('srvRecent').textContent = r.length
       ? `${r.length} 次已完成 —— 最近：${r[0].client} ${r[0].path} ${r[0].human}`
       : (s.addr ? '还没有下载。' : '');
+
+    srvDone = new Map(Object.entries(s.done || {}));
+    srvActive = new Map((s.active || []).map((a) => [a.client, a]));
+    paintDownloads();
   } catch (e) { /* the console outlives individual runs */ }
 }
 setInterval(pollServer, 1000);
 
-const humanBytes = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MiB'
-  : n >= 1024 ? (n / 1024).toFixed(1) + ' KiB' : n + ' B';
+function humanBytes(n) {
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MiB'
+    : n >= 1024 ? (n / 1024).toFixed(1) + ' KiB' : n + ' B';
+}
 
 /* ---------- the table ---------- */
 
@@ -791,7 +832,9 @@ function render() {
       `<td>${countryCell(r)}</td>` +
       `<td class="num">${r.reachable ? esc(r.ping) : '—'}</td>` +
       `<td><span class="st ${statusClass(r.status)}">${esc(zh(r.status))}</span></td>` +
-      `<td>${esc(zh(r.fw))}</td><td class="${r.error ? 'err' : 'note'}">${esc(r.error || zhNote(r.note))}</td>`;
+      `<td>${esc(zh(r.fw))}</td>` +
+      `<td class="dl${srvDone.has(r.ip) ? ' dl-ok' : ''}" data-dl="${esc(r.ip)}">${esc(dlText(r.ip))}</td>` +
+      `<td class="${r.error ? 'err' : 'note'}">${esc(r.error || zhNote(r.note))}</td>`;
     frag.appendChild(tr);
   }
   rowsEl.replaceChildren(frag);
@@ -807,6 +850,9 @@ const esc = (s) => (s == null ? '' : String(s)
 document.querySelectorAll('thead th').forEach((th) => {
   th.onclick = () => {
     const k = th.dataset.k;
+    // The download column is live server state, not a field on the row, so
+    // there is nothing to sort it by.
+    if (!k) return;
     sortDir = sortKey === k ? -sortDir : 1;
     sortKey = k;
     render();
@@ -879,6 +925,8 @@ function request() {
     fwProto: $('fwProto').value, fwHost: $('fwHost').value, fwPort: $('fwPort').value,
     fwUser: $('fwUser').value, fwPass: $('fwPass').value,
     fwFile: internalMode() ? $('fwFileSel').value : $('fwFile').value,
+    // The built-in server does not need pacing, and the console says so.
+    fwStagger: internalMode() ? 0 : num('fwStagger'),
     watch: $('watch').checked, watchIntervalS: num('watchIntervalS'),
     sshPort: $('sshPort').value, timeoutS: num('timeoutS'), legacy: $('legacy').checked,
     serveWaitS: num('serveWaitS'),

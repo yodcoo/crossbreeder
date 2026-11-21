@@ -209,6 +209,9 @@ type runRequest struct {
 	FwPass    string `json:"fwPass"`
 	FwFile    string `json:"fwFile"`
 	FwWaitS   int    `json:"fwWaitS"`
+	// FwStaggerS spaces out when each AP is told to fetch the image, so a small
+	// external TFTP daemon is not asked to serve the whole fleet at once.
+	FwStaggerS int `json:"fwStagger"`
 
 	Watch         bool `json:"watch"`
 	WatchInterval int  `json:"watchIntervalS"`
@@ -315,6 +318,17 @@ func (u *uiServer) handleState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"running": u.running, "finished": u.finished, "results": len(u.results)})
 }
 
+// Console presets for this build. The console opens already pointed at the
+// external TFTP daemon and the pacing this operator uses, rather than at an
+// empty form that has to be filled in the same way every time. The command
+// line is unaffected: these only seed /api/defaults.
+const (
+	presetFwHost     = "192.168.55.2"
+	presetFwPort     = "69"
+	presetFwProto    = "tftp"
+	presetFwStaggerS = 20
+)
+
 // handleDefaults seeds the form from the flags the process was started with, so
 // the console and the command line agree about what "default" means.
 func (u *uiServer) handleDefaults(w http.ResponseWriter, r *http.Request) {
@@ -329,8 +343,10 @@ func (u *uiServer) handleDefaults(w http.ResponseWriter, r *http.Request) {
 		"timeoutS":        int(u.opt.timeout / time.Second),
 		"watchIntervalS":  int(u.opt.watchInterval / time.Second),
 		"legacy":          u.opt.legacy,
-		"fwProto":         u.opt.fwProto,
-		"fwPort":          u.opt.fwPort,
+		"fwProto":         presetFwProto,
+		"fwHost":          presetFwHost,
+		"fwPort":          presetFwPort,
+		"fwStagger":       presetFwStaggerS,
 		"servePort":       u.opt.servePort,
 		"serveWaitS":      int(u.opt.serveWait / time.Second),
 		"serveDir":        workingDir(),
@@ -512,6 +528,8 @@ func (o options) merge(r runRequest) options {
 	setDurIfPositive(&out.timeout, time.Duration(r.TimeoutS)*time.Second)
 	setDurIfPositive(&out.serveWait, time.Duration(r.ServeWaitS)*time.Second)
 	setDurIfPositive(&out.fwWait, time.Duration(r.FwWaitS)*time.Second)
+	// Zero is meaningful here: it turns the spacing off.
+	out.fwStagger = time.Duration(max(0, r.FwStaggerS)) * time.Second
 	// The console has a Stop button, so watching there is open-ended.
 	out.watchEnabled = r.Watch
 	out.watch = 0

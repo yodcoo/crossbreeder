@@ -94,9 +94,21 @@ func splitCommands(in []string) []string {
 const minNewPasswordLen = 8
 
 // defaultNewPassword is what the original Crossbreeder set on an AP that
-// demanded a change (varMigrateNewPassword). Keeping it matters for more than
-// familiarity: APs already flashed by that tool are sitting on this password.
-const defaultNewPassword = "Crossbreeder"
+// demanded a change (varMigrateNewPassword). This fork sets it to the password
+// the operator already uses everywhere else, so a freshly flashed AP can be
+// logged into without guessing which value a masked field happens to hold.
+const defaultNewPassword = "admin123"
+
+// staggerFor decides whether the firmware pushes should be spaced out. Only an
+// external server needs it: the built-in one is this process's own Go HTTP
+// server and takes concurrent fetches in its stride, whereas a small
+// third-party TFTP daemon can be overrun by a dozen simultaneous requests.
+func staggerFor(opt options, builtIn bool) time.Duration {
+	if builtIn || !opt.fw {
+		return 0
+	}
+	return opt.fwStagger
+}
 
 func buildConfig(opt options, password, newPassword string) (ap.Config, []string, error) {
 	var notes []string
@@ -265,6 +277,7 @@ func runJob(ctx context.Context, opt options, hosts []string, cfg ap.Config, emi
 		rn := &Runner{
 			Concurrency:        opt.concurrency,
 			Config:             cfg,
+			Stagger:            staggerFor(opt, srv != nil),
 			PerHostCredentials: func(ip string) []ap.Credentials { return r1creds[ip] },
 			OnResult: func(_ int, r ap.Result) {
 				mu.Lock()

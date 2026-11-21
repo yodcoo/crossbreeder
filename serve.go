@@ -35,7 +35,7 @@ type fileServer struct {
 
 	mu       sync.Mutex
 	fetched  map[string]map[string]int64 // client IP -> path -> bytes served
-	complete map[string]bool             // client IP -> took a full image
+	complete map[string]int64            // client IP -> size of the image it took whole
 	log      []string
 	recent   []Transfer
 	active   map[int64]*activeReq
@@ -89,6 +89,10 @@ type ServerStatus struct {
 	Active    []ActiveConn `json:"active"`
 	Recent    []Transfer   `json:"recent"`
 	Completed int          `json:"completed"`
+	// Done maps each address that fetched an image in full to the number of
+	// bytes it took, so the console can show per-AP download progress in the
+	// results table instead of making the operator read the transfer pane.
+	Done map[string]int64 `json:"done"`
 }
 
 // startFileServer binds the server and begins serving dir.
@@ -124,7 +128,7 @@ func startFileServer(dir, advertiseIP string, targets []string, port int) (*file
 		addr:     net.JoinHostPort(ip, fmt.Sprint(ln.Addr().(*net.TCPAddr).Port)),
 		ln:       ln,
 		fetched:  map[string]map[string]int64{},
-		complete: map[string]bool{},
+		complete: map[string]int64{},
 		active:   map[int64]*activeReq{},
 	}
 	f.reason, f.considered = reason, considered
@@ -174,6 +178,12 @@ func (f *fileServer) Status() ServerStatus {
 	sort.Slice(st.Active, func(i, j int) bool { return st.Active[i].Client < st.Active[j].Client })
 	for range f.complete {
 		st.Completed++
+	}
+	if len(f.complete) > 0 {
+		st.Done = make(map[string]int64, len(f.complete))
+		for ip, n := range f.complete {
+			st.Done[ip] = n
+		}
 	}
 	// Newest first reads better in a panel.
 	for i, j := 0, len(st.Recent)-1; i < j; i, j = i+1, j-1 {
@@ -234,7 +244,7 @@ func (f *fileServer) record(client, path string, n int64, status int, d time.Dur
 	// Ruckus retries and may use ranges, so bytes accumulate across requests.
 	per[path] += n
 	if size > 0 && per[path] >= size && size >= minImageBytes {
-		f.complete[client] = true
+		f.complete[client] = size
 	}
 
 	f.log = append(f.log, fmt.Sprintf("  %-15s %-3d %-28s %9s in %s",
@@ -264,7 +274,7 @@ func (f *fileServer) Completed(hosts []string) (done []string, pending []string)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	for _, h := range hosts {
-		if f.complete[h] {
+		if _, ok := f.complete[h]; ok {
 			done = append(done, h)
 		} else {
 			pending = append(pending, h)
@@ -285,8 +295,8 @@ func (f *fileServer) CompletedElsewhere(hosts []string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []string
-	for ip, ok := range f.complete {
-		if ok && !known[ip] {
+	for ip := range f.complete {
+		if !known[ip] {
 			out = append(out, ip)
 		}
 	}

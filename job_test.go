@@ -108,8 +108,8 @@ func TestChangePasswordSwitchIsSeparateFromTheValue(t *testing.T) {
 
 // The default is the original's, and APs already flashed by that tool carry it.
 func TestDefaultNewPasswordMatchesTheOriginal(t *testing.T) {
-	if defaultNewPassword != "Crossbreeder" {
-		t.Errorf("defaultNewPassword = %q, want %q", defaultNewPassword, "Crossbreeder")
+	if defaultNewPassword != "admin123" {
+		t.Errorf("defaultNewPassword = %q, want %q", defaultNewPassword, "admin123")
 	}
 	if len(defaultNewPassword) < minNewPasswordLen {
 		t.Errorf("the default is shorter than the AP will accept")

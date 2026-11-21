@@ -45,6 +45,7 @@ func parseFlags() options {
 	flag.StringVar(&o.serveIP, "serve-ip", "", "address the APs should fetch from (default: whichever local address routes to them)")
 	flag.DurationVar(&o.serveWait, "serve-wait", 30*time.Minute, "how long to keep serving after the pushes are started")
 	flag.DurationVar(&o.fwWait, "fw-wait", 0, "after starting the update, hold the session open this long to capture the AP's progress output")
+	flag.DurationVar(&o.fwStagger, "fw-stagger", 0, "wait at least this long between starting each AP's firmware download (external servers only; 0 disables)")
 	flag.BoolVar(&o.factory, "factory", false, "reset the AP to factory defaults (implies -reboot; the reset is inert until then)")
 	flag.BoolVar(&o.reboot, "reboot", false, "reboot the AP when finished")
 	flag.Var(&o.commands, "cmd", "run an AP CLI command; repeat the flag, or separate commands with newlines, to run several in the one session")

@@ -56,6 +56,11 @@ type options struct {
 	fwPass  string
 	fwFile  string
 	fwWait  time.Duration
+	// fwStagger spaces out when each AP is told to start downloading. It only
+	// applies to an external firmware server: the built-in one is written to
+	// cope with concurrent fetches, while a small third-party TFTP daemon is
+	// not, and overruns there have been observed to corrupt its own settings.
+	fwStagger time.Duration
 
 	serve     serveFlag
 	serveDir  string

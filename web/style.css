@@ -285,3 +285,8 @@ aside.locked .body { opacity: .5; }
 /* The command box is a textarea because a sequence is the normal case, not the
    exception — unlocking a country code takes several lines. */
 textarea#command { min-height: 68px; resize: vertical; font-family: var(--mono, ui-monospace, monospace); font-size: 13px; }
+
+/* A download that finished is the one thing in the grid worth a colour: it is
+   the only proof the AP actually took the whole image. */
+td.dl { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--muted); }
+td.dl-ok { color: var(--ok); font-weight: 600; }
