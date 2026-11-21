@@ -22,7 +22,7 @@ on:
       version:
         description: "写进 exe 版本资源的版本号"
         required: false
-        default: "1.0.11-zh"
+        default: "1.0.12-zh"
 
 permissions:
   contents: read
@@ -54,7 +54,7 @@ jobs:
           set -euo pipefail
           # push 触发时没有 inputs.version，回落到写死的默认值
           VERSION="${{ github.event.inputs.version }}"
-          VERSION="${VERSION:-1.0.11-zh}"
+          VERSION="${VERSION:-1.0.12-zh}"
           mkdir -p dist
           go build -trimpath \
             -ldflags "-s -w -X main.version=${VERSION}" \
